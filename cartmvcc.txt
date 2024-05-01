@@ -1,0 +1,225 @@
+package servlets;
+
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.time.LocalDate;
+
+public class OrdersDAL {
+	public int insertOrder(double totalCost, int customerId) {
+		String sql = "INSERT INTO orders_pr(o_total,cust_id,o_date) VALUES (?, ?,?) returning o_id";
+		LocalDate currentDate = LocalDate.now();
+		java.sql.Date sqlDate = java.sql.Date.valueOf(currentDate);
+
+		try {
+			Connection conn = DriverManager.getConnection("jdbc:postgresql://192.168.110.48:5432/plf_training",
+					"plf_training_admin", "pff123");
+			PreparedStatement pstmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
+			pstmt.setDouble(1, totalCost);
+			pstmt.setInt(2, customerId);
+			pstmt.setDate(3, sqlDate);
+
+			pstmt.executeUpdate();
+			int orderid = 0;
+			ResultSet generatedKeys = pstmt.getGeneratedKeys();
+			if (generatedKeys.next()) {
+				orderid = generatedKeys.getInt(1);
+			}
+			return orderid;
+		} catch (SQLException ex) {
+			ex.printStackTrace();
+			return 0;
+		}
+	}
+	
+}
+
+
+package servlets;
+
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.util.Arrays;
+import java.util.List;
+
+import javax.servlet.ServletException;
+import javax.servlet.annotation.WebServlet;
+import javax.servlet.http.HttpServlet;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import javax.servlet.http.HttpSession;
+
+import com.google.gson.Gson;
+import com.google.gson.JsonObject;
+
+@WebServlet("/CheckoutController")
+public class CheckoutController extends HttpServlet {
+	private static final long serialVersionUID = 1L;
+
+	protected void doPost(HttpServletRequest request, HttpServletResponse response)
+			throws ServletException, IOException {
+		String cartItemsJson = request.getParameter("cartitems");
+		Gson gson = new Gson();
+		CartItem[] cartItemss = gson.fromJson(cartItemsJson, CartItem[].class);
+
+		List<CartItem> cartItems = Arrays.asList(cartItemss);
+		if (cartItems.isEmpty()) {
+			JsonObject jsonResponse = new JsonObject();
+			jsonResponse.addProperty("success", false);
+			jsonResponse.addProperty("error", "Cart is empty. Add items to cart before checkout.");
+			response.setContentType("application/json");
+			PrintWriter out = response.getWriter();
+			out.print(jsonResponse.toString());
+			out.flush();
+			return;
+		}
+		int customerId = 123;
+
+		int orderId;
+
+		double orderTotal = calculateTotalOrderCost(cartItems);
+		System.out.println(orderTotal);
+
+		OrdersDAL orders = new OrdersDAL();
+		orderId = orders.insertOrder(orderTotal, customerId);
+		if (orderId != 0)
+			System.out.println("inserted into orders");
+
+		boolean b2 = false;
+		ProductOrdersDAL productorders = new ProductOrdersDAL();
+		b2 = productorders.insertIntoProductOrder(orderId, cartItems);
+		// for (CartItem item : cartItems) {
+		// Products product = new GetProductsDAL().getProductById(item.getPid());
+		// b2 = productorders.insertProductOrder(orderId, item.getPid(), item.getQuantity(), product.getPprice());
+		// if (!b2) {
+		// System.out.println("could not insert into productorders");
+		// break;
+		// }
+		// }
+		JsonObject jsonResponse = new JsonObject();
+		if (orderId != 0 && b2) {
+			HttpSession session = request.getSession();
+			session.removeAttribute("cartitems");
+			jsonResponse.addProperty("success", true);
+			jsonResponse.addProperty("totalAmount", orderTotal);
+		} else {
+			jsonResponse.addProperty("success", false);
+		}
+		response.setContentType("application/json");
+		PrintWriter out = response.getWriter();
+		out.print(jsonResponse.toString());
+		out.flush();
+
+	}
+
+	private double calculateTotalOrderCost(List<CartItem> cartItems) {
+		double totalCost = 0;
+		for (CartItem item : cartItems) {
+			Products product = new GetProductsDAL().getProductById(item.getPid());
+			if (product != null) {
+				totalCost += item.getQuantity() * product.getPprice();
+			}
+		}
+		return totalCost;
+	}
+
+}
+
+package servlets;
+
+import java.sql.CallableStatement;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.SQLException;
+import java.util.List;
+
+public class ProductOrdersDAL {
+	// public boolean insertProductOrder(int orderId, int productId, int quantity, double price) {
+	// String sql = "INSERT INTO productorder_pr(o_id,p_id,quantity,price) VALUES (?, ?, ?, ?)";
+	//
+	// try (Connection conn = DriverManager.getConnection("jdbc:postgresql://192.168.110.48:5432/plf_training",
+	// "plf_training_admin", "pff123"); PreparedStatement pstmt = conn.prepareStatement(sql)) {
+	// pstmt.setInt(1, orderId);
+	// pstmt.setInt(2, productId);
+	// pstmt.setInt(3, quantity);
+	// pstmt.setDouble(4, price);
+	//
+	// int rowsAffected = pstmt.executeUpdate();
+	// return rowsAffected > 0;
+	// } catch (SQLException ex) {
+	// ex.printStackTrace();
+	// return false;
+	// }
+	// }
+	public boolean insertIntoProductOrder(int orderid, List<CartItem> cartitems) {
+		List<ProductOrder> productorders = null;
+		for (CartItem item : cartitems) {
+			Products product = new GetProductsDAL().getProductById(item.getPid());
+			ProductOrder po = new ProductOrder(orderid, item.getPid(), item.getQuantity(), product.getPprice());
+			productorders.add(po);
+		}
+		try {
+			Connection cn = DriverManager.getConnection("jdbc:postgresql://192.168.110.48:5432/plf_training",
+					"plf_training_admin", "pff123");
+			CallableStatement cst = cn.prepareCall("{call insert_products(?)}");
+			
+		} catch (SQLException e) {
+			System.out.println(e.getMessage());
+		}
+
+		return true;
+	}
+}
+
+package servlets;
+
+public class ProductOrder {
+	private int oid;
+	private int pid;
+	private int quanity;
+	private double price;
+
+	public ProductOrder(int oid, int pid, int quanity, double price) {
+		super();
+		this.oid = oid;
+		this.pid = pid;
+		this.quanity = quanity;
+		this.price = price;
+	}
+
+	public int getOid() {
+		return oid;
+	}
+
+	public void setOid(int oid) {
+		this.oid = oid;
+	}
+
+	public int getPid() {
+		return pid;
+	}
+
+	public void setPid(int pid) {
+		this.pid = pid;
+	}
+
+	public int getQuanity() {
+		return quanity;
+	}
+
+	public void setQuanity(int quanity) {
+		this.quanity = quanity;
+	}
+
+	public double getPrice() {
+		return price;
+	}
+
+	public void setPrice(int price) {
+		this.price = price;
+	}
+
+}
