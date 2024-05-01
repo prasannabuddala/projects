@@ -1,0 +1,249 @@
+<%@ page language="java" contentType="text/html; charset=ISO-8859-1"
+    pageEncoding="ISO-8859-1"%>
+<%@page import="java.util.*" %>
+<%@page import="servlets.Employee" %>
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="ISO-8859-1">
+<title>Insert title here</title>
+<style>
+tr.rows:hover{
+cursor:pointer;
+}
+</style>
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+</head>
+<body>
+<h1>hello world</h1>
+<h2 id="errorMsg" style="display:none;color:red"></h2>
+<div id="inputcontainer">
+<label for="eid">Employee id: </label><input type="number" id="eid"> <br />
+<label for="ename">Employee name: </label><input type="text" id="ename">  <br />
+<label for="erole">Employee role: </label><input type="text" id="erole"> <br />
+<label for="esal">Employee salary: </label><input type="number" id="esal"> <br />
+<label for="edate">Employee joindate: </label><input type="date" id="edate"> <br />
+<label for="edept">Employee deptno: </label><input type="number" id="edept"> <br />
+</div>
+<br />
+<div id="navigation">
+<button id="first">first</button>
+<button id="previous">previous</button>
+<button id="next">next</button>
+<button id="last">last</button>
+</div>
+<br />
+<h2 id="heading1">employees list: </h2>
+<div class="list" id="listTab">
+<table>
+<tr class="headerrow"><th>id</th>
+<th>name</th>
+<th>role</th>
+<th>salary</th>
+<th>join date</th>
+<th>deptno</th>
+</tr>
+<% List<Employee> emps = (ArrayList<Employee>) request.getAttribute("employees");
+for(Employee emp: emps){
+	%>
+	<tr id ="<%= emp.getId() %>" class="rows" >
+	<td id="idd"><%= emp.getId()%></td>
+	<td id="name"><%= emp.getEname()%></td>
+	<td id="role"><%= emp.getJob()%></td>
+	<td id="sal"><%= emp.getSalary()%></td>
+	<td id="date"><%= emp.getDate()%></td>
+	<td id="dept"><%= emp.getDeptno()%></td>
+	</tr>
+	<% 
+}
+%>
+</table>
+</div>
+</body>
+<script>
+$(document).ready(function(){
+	function updateInputFields(data){
+		$("#eid").val(data.find("td#idd").text());
+		$("#ename").val(data.find("td#name").text());
+		$("#erole").val(data.find("td#role").text());
+		$("#esal").val(data.find("td#sal").text());
+		$("#edate").val(data.find("td#date").text());
+		$("#edept").val(data.find("td#dept").text());
+	}
+	updateInputFields($("tr:eq(1)"));
+	$("tr.rows").click(function(){
+		let currow = $(this);
+		let rowId = currow.attr("id");
+		updateInputFields(currow);
+		
+	})
+	$("button#first").click(function(){
+		updateInputFields($("tr:eq(1)"));
+	})
+	$("button#last").click(function(){
+		updateInputFields($("tr:last"));
+	})
+	$("button#previous,button#next").click(function(){
+		let currEmpid = $("#eid").val();
+		$.ajax({
+			url: "/employeecrudmvc/GetSpecificController",
+			method : "GET",
+			data : {empid:currEmpid,buttonType:$(this).attr("id")},
+			success : function(res){
+				if(res == null){
+					alert("you have reached the extent");
+				}
+				else{
+					$("#eid").val(res.id);
+					$("#ename").val(res.ename);
+					$("#erole").val(res.job);
+					$("#esal").val(res.salary);
+					var date = new Date(res.date);
+			        var formattedDate = date.toISOString().substring(0, 10);
+			        $("#edate").val(formattedDate);
+					$("#edept").val(res.deptno);
+				}
+			},
+			error: function(a,b,err){
+				console.log("error "+err);
+			}
+		})
+	})
+})
+</script>
+</html>
+
+
+package servlets;
+
+import java.io.IOException;
+import java.util.List;
+
+import javax.servlet.ServletException;
+import javax.servlet.annotation.WebServlet;
+import javax.servlet.http.HttpServlet;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+
+@WebServlet("/home")
+public class GetEmployeesController extends HttpServlet {
+	private static final long serialVersionUID = 1L;
+
+	protected void doGet(HttpServletRequest req, HttpServletResponse res) throws ServletException, IOException {
+		// System.out.println("hii");
+		EmployeeDAL ed = new EmployeeDAL();
+		List<Employee> empsl = ed.getEmployees();
+		req.setAttribute("employees", empsl);
+		req.getRequestDispatcher("index.jsp").forward(req, res);
+
+	}
+
+}
+
+
+package servlets;
+
+import java.sql.Connection;
+import java.sql.Date;
+import java.sql.DriverManager;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.List;
+
+public class EmployeeDAL {
+	Connection cn = null;
+	List<Employee> list = new ArrayList<>();
+
+	public EmployeeDAL() {
+		try {
+			Class.forName("org.postgresql.Driver");
+			cn = DriverManager.getConnection("jdbc:postgresql://192.168.110.48:5432/plf_training", "plf_training_admin",
+					"pff123");
+		} catch (ClassNotFoundException e) {
+			System.out.println(e.getMessage());
+		} catch (SQLException e) {
+			System.out.println(e.getMessage());
+		}
+	}
+
+	public List<Employee> getEmployees() {
+		try {
+			Statement st = cn.createStatement();
+			ResultSet rs = st.executeQuery("select * from employee_nh");
+			while (rs.next()) {
+				int id = rs.getInt("id");
+				String name = rs.getString("ename");
+				String job = rs.getString("job");
+				int mgr = rs.getInt("mgr");
+				Date date = rs.getDate("hire_date");
+				double salary = rs.getDouble("salary");
+				double comm = rs.getDouble("comm");
+				int deptno = rs.getInt("dept_no");
+				Employee emp = new Employee(id, name, job, mgr, date, salary, comm, deptno);
+				list.add(emp);
+			}
+		} catch (SQLException e) {
+			System.out.println(e.getMessage());
+		}
+		return list;
+	}
+
+	public Employee getSpecificEmployee(int empid, String btn) {
+		Employee e = null;
+		try {
+			Statement st = cn.createStatement(ResultSet.TYPE_SCROLL_SENSITIVE, ResultSet.CONCUR_UPDATABLE);
+			ResultSet rs = st.executeQuery("select * from employee_nh");
+			while (rs.next()) {
+				if (empid == rs.getInt("id") && btn.equals("previous")) {
+					rs.previous();
+					break;
+				} else if (empid == rs.getInt("id") && btn.equals("next")) {
+					rs.next();
+					break;
+				}
+			}
+			if (!rs.isBeforeFirst() && !rs.isAfterLast()) {
+				e = new Employee(rs.getInt("id"), rs.getString("ename"), rs.getString("job"), rs.getInt("mgr"),
+						rs.getDate("hire_date"), rs.getDouble("salary"), rs.getDouble("comm"), rs.getInt("dept_no"));
+			}
+
+		} catch (SQLException e1) {
+			System.out.println(e1.getMessage());
+		}
+		return e;
+	}
+
+}
+
+package servlets;
+
+import java.io.IOException;
+import java.io.PrintWriter;
+
+import javax.servlet.ServletException;
+import javax.servlet.annotation.WebServlet;
+import javax.servlet.http.HttpServlet;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+
+import com.google.gson.Gson;
+
+@WebServlet("/GetSpecificController")
+public class GetSpecificController extends HttpServlet {
+	private static final long serialVersionUID = 1L;
+
+	protected void doGet(HttpServletRequest req, HttpServletResponse res) throws ServletException, IOException {
+		int empid = Integer.parseInt(req.getParameter("empid"));
+		String type = req.getParameter("buttonType");
+		// System.out.println(empid + " " + type);
+		EmployeeDAL ed = new EmployeeDAL();
+		Employee emp = ed.getSpecificEmployee(empid, type);
+		Gson gson = new Gson();
+		String employeeString = gson.toJson(emp);
+		res.setContentType("application/json");
+		PrintWriter pw = res.getWriter();
+		pw.println(employeeString);
+	}
+}

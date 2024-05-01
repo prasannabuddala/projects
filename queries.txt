@@ -1,0 +1,10 @@
+SELECT hsncode, gst
+	FROM public.hsn_pr;
+SELECT o_id, o_total, cust_id
+	FROM public.orders_pr;
+SELECT pid, pname, pprice, pcategoryid, pimg, phsncode
+	FROM public."Products_pr";
+SELECT cat_id, cat_name
+	FROM public."ProductCategories";
+SELECT o_id, p_id, quantity, price
+	FROM public.productorder_pr;
