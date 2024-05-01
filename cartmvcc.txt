@@ -223,3 +223,44 @@ public class ProductOrder {
 	}
 
 }
+// Convert the list of employee objects to an array
+EmployeeType[] employeeArray = new EmployeeType[employeeList.size()];
+for (int i = 0; i < employeeList.size(); i++) {
+    Employee emp = employeeList.get(i);
+    employeeArray[i] = new EmployeeType(emp.getName(), emp.getSalary());
+}
+
+try {
+    Connection conn = DriverManager.getConnection("jdbc:postgresql://localhost:5432/your_database", "your_username", "your_password");
+    
+    // Prepare the call to the stored procedure
+    CallableStatement callableStatement = conn.prepareCall("{call insert_employees(?)}");
+   
+    // Set the input parameter for the stored procedure
+    callableStatement.setArray(1, conn.createArrayOf("employee_type", employeeArray));
+   
+    // Execute the stored procedure
+    callableStatement.execute();
+   
+    // Close the connection
+    conn.close();
+} catch (SQLException e) {
+    e.printStackTrace();
+}
+CREATE OR REPLACE PROCEDURE insert_employees(
+   employee_data employee_type[]
+)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+   emp_record employee_type;
+BEGIN
+   -- Loop through each employee record in the array
+   FOREACH emp_record IN ARRAY employee_data
+   LOOP
+      -- Access individual fields of the employee record
+      INSERT INTO employees (emp_name, emp_salary)
+      VALUES (emp_record.name, emp_record.salary);
+   END LOOP;
+END;
+$$;
